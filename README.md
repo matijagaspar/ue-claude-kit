@@ -30,20 +30,24 @@ my-game/                     my-monorepo/
 > Install ue-claude-kit from https://github.com/matijagaspar/ue-claude-kit into this project.
 
 Claude should follow [Notes for the installing agent](#notes-for-the-installing-agent), run the
-clone + install below, then use the `unreal-editor` skill.
+install command below, then use the `unreal-editor` skill.
 
 **Or run it yourself** from the repo root:
 
 ```sh
-# clone + install + clean up (uses your git credentials, so it works while the repo is private)
-git clone --depth 1 https://github.com/matijagaspar/ue-claude-kit.git /tmp/uck && python /tmp/uck/install.py . --source "ue-claude-kit@$(git -C /tmp/uck rev-parse --short HEAD)" && rm -rf /tmp/uck
-
-# one-liner - ONLY if the repo is public (raw.githubusercontent.com rejects private repos):
-# downloads bootstrap.py, which fetches the kit into a temp folder, installs it, deletes the temp copy
+# one-liner (bash, PowerShell or cmd): downloads bootstrap.py, which fetches the kit into a temp
+# folder (git clone, or a zip download when git is missing), installs it and deletes the temp copy.
+# Install options go after the "." - e.g.  . --uproject ue_project/MyGame/MyGame.uproject
 python -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/matijagaspar/ue-claude-kit/main/bootstrap.py').read())" .
+
+# or clone + install + clean up yourself
+git clone --depth 1 https://github.com/matijagaspar/ue-claude-kit.git /tmp/uck && python /tmp/uck/install.py . --source "ue-claude-kit@$(git -C /tmp/uck rev-parse --short HEAD)" && rm -rf /tmp/uck
 ```
 
-PowerShell: `git clone --depth 1 https://github.com/matijagaspar/ue-claude-kit.git $env:TEMP\uck; python $env:TEMP\uck\install.py .; Remove-Item -Recurse -Force $env:TEMP\uck`
+PowerShell clone variant: `git clone --depth 1 https://github.com/matijagaspar/ue-claude-kit.git $env:TEMP\uck; python $env:TEMP\uck\install.py .; Remove-Item -Recurse -Force $env:TEMP\uck`
+
+Prefer to read what you run first? Open [bootstrap.py](bootstrap.py) - it only clones/downloads this
+repo into a temp folder and runs `install.py`.
 
 If you already have a checkout of the kit anywhere, `python <kit>/bootstrap.py <repo_root> [options]`
 does the same (fresh clone of `main`, install, cleanup; `--ref` picks a branch/tag).
