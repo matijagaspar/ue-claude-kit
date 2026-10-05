@@ -1,0 +1,6 @@
+* text=auto
+# shell launcher must stay LF, batch launcher CRLF
+payload/ue text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.cmd text eol=crlf

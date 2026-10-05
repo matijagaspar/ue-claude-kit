@@ -1,0 +1,12 @@
+#!/usr/bin/env sh
+# ue-claude-kit launcher (Git Bash / Linux / macOS): finds a Python 3 and runs the kit CLI.
+d=$(cd "$(dirname "$0")" && pwd)
+py=${UE_PYTHON:-$(sed -n 's/^python_exe: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "$d/ue_local_config.local" 2>/dev/null)}
+if [ -z "$py" ] || [ ! -e "$py" ]; then
+  py=$(command -v python3 || command -v python || command -v py)
+fi
+if [ -z "$py" ]; then
+  echo "ue: no Python 3 found; set UE_PYTHON (Unreal ships one in Engine/Binaries/ThirdParty/Python3)." >&2
+  exit 1
+fi
+exec "$py" "$d/.claude/skills/unreal-editor/scripts/ue.py" "$@"
