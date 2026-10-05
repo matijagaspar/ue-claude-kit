@@ -8,15 +8,19 @@ import uuid
 
 from .discover import CONFIG_NAME
 
-GITIGNORE_LINES = [
-    "# ue-claude-kit (machine-local)", CONFIG_NAME,
-    "# Unreal Engine", "Binaries/", "DerivedDataCache/", "Intermediate/", "Saved/", ".vs/", "*.sln",
+# Root .gitignore: only the kit's machine-local config. Unreal rules go into the .gitignore
+# next to the .uproject, anchored, so they never match other parts of a monorepo.
+ROOT_GITIGNORE = ["# ue-claude-kit (machine-local)", "/" + CONFIG_NAME]
+PROJECT_GITIGNORE = [
+    "# Unreal Engine (ue-claude-kit)", "/Binaries/", "/DerivedDataCache/", "/Intermediate/", "/Saved/",
+    "/Plugins/**/Binaries/", "/Plugins/**/Intermediate/", "/.vs/", "/*.sln",
 ]
 CLAUDE_MD_BEGIN = "<!-- ue-claude-kit:begin -->"
 CLAUDE_MD_END = "<!-- ue-claude-kit:end -->"
 CLAUDE_MD_BODY = """## Unreal Engine (ue-claude-kit)
 
-This project drives the Unreal editor through the `unreal-editor` skill (`.claude/skills/unreal-editor/`).
+UE project: `{uproject}` (relative to the repo root).
+This repo drives the Unreal editor through the `unreal-editor` skill (`.claude/skills/unreal-editor/`).
 Load that skill before any Unreal work. Machine paths live in `ue_local_config.local` (gitignored; YAML).
 
 Editor launch rules:
@@ -70,15 +74,19 @@ def write_mcp_json(root, name, url):
     return changed
 
 
-def update_gitignore(root):
-    p = os.path.join(root, ".gitignore")
-    existing = _read(p).splitlines() if os.path.exists(p) else []
-    have = {l.strip() for l in existing}
+def _ignore_key(line):
+    """`Binaries`, `/Binaries`, `Binaries/` and `/Binaries/` count as the same rule."""
+    return line.strip().strip("/")
+
+
+def _append_gitignore(path, lines):
+    existing = _read(path).splitlines() if os.path.exists(path) else []
+    have = {_ignore_key(l) for l in existing if l.strip() and not l.lstrip().startswith("#")}
     block, added, comment = [], [], None
-    for line in GITIGNORE_LINES:
+    for line in lines:
         if line.startswith("#"):
             comment = line
-        elif line not in have:
+        elif _ignore_key(line) not in have:
             if comment:
                 block.append(comment)
                 comment = None
@@ -86,14 +94,28 @@ def update_gitignore(root):
             added.append(line)
     if added:
         text = "\n".join(existing).rstrip()
-        _write(p, (text + "\n\n" if text else "") + "\n".join(block) + "\n")
+        _write(path, (text + "\n\n" if text else "") + "\n".join(block) + "\n")
     return added
 
 
-def update_claude_md(root):
+def update_gitignore(root, project_dir):
+    """Returns {gitignore path relative to root: [added lines]}."""
+    out = {}
+    targets = [(root, ROOT_GITIGNORE)]
+    if project_dir:
+        same = os.path.normcase(os.path.abspath(project_dir)) == os.path.normcase(os.path.abspath(root))
+        targets = [(root, ROOT_GITIGNORE + PROJECT_GITIGNORE)] if same else targets + [(project_dir, PROJECT_GITIGNORE)]
+    for d, lines in targets:
+        added = _append_gitignore(os.path.join(d, ".gitignore"), lines)
+        if added:
+            out[os.path.relpath(os.path.join(d, ".gitignore"), root).replace("\\", "/")] = added
+    return out
+
+
+def update_claude_md(root, uproject_rel):
     p = os.path.join(root, "CLAUDE.md")
     text = _read(p) if os.path.exists(p) else ""
-    block = CLAUDE_MD_BEGIN + "\n" + CLAUDE_MD_BODY + CLAUDE_MD_END
+    block = CLAUDE_MD_BEGIN + "\n" + CLAUDE_MD_BODY.format(uproject=uproject_rel or "(none yet - `ue new`)") + CLAUDE_MD_END
     if CLAUDE_MD_BEGIN in text:
         new = re.sub(re.escape(CLAUDE_MD_BEGIN) + ".*?" + re.escape(CLAUDE_MD_END), lambda m: block, text, flags=re.S)
     else:
@@ -156,6 +178,7 @@ def new_project(templates_dir, template, name, dest_root, variant=None, engine_v
     tpl = os.path.join(templates_dir, template)
     if not os.path.isdir(tpl):
         raise ValueError("Template %s not found in %s (see `ue templates`)." % (template, templates_dir))
+    os.makedirs(dest_root, exist_ok=True)
     if glob.glob(os.path.join(dest_root, "*.uproject")):
         raise ValueError("%s already contains a .uproject." % dest_root)
     if os.path.isdir(os.path.join(tpl, "Source")):

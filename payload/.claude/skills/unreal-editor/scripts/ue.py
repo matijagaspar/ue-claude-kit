@@ -62,7 +62,7 @@ def mcp(cfg):
 # ---------------------------------------------------------------- commands
 
 def cmd_discover(a):
-    cfg = disc.discover(ROOT, disc.load_config(ROOT), port=a.port)
+    cfg = disc.discover(ROOT, disc.load_config(ROOT), port=a.port, uproject=a.uproject)
     disc.write_config(ROOT, cfg)
     e, p = cfg["engine"], cfg["project"]
     log("Project : %s" % (p["uproject"] or "(none yet - use `ue new`)"))
@@ -82,10 +82,9 @@ def cmd_setup(a):
         log("Plugins not in this engine (skipped): %s" % ", ".join(skipped))
     if project.write_mcp_json(ROOT, cfg["mcp"]["server_name"], cfg["mcp"]["url"]):
         log(".mcp.json: %s -> %s (restart Claude Code to load it)" % (cfg["mcp"]["server_name"], cfg["mcp"]["url"]))
-    gi = project.update_gitignore(ROOT)
-    if gi:
-        log(".gitignore: added %s" % ", ".join(gi))
-    if not a.no_claude_md and project.update_claude_md(ROOT):
+    for path, added_lines in project.update_gitignore(ROOT, cfg["project"]["dir"]).items():
+        log("%s: added %s" % (path, ", ".join(added_lines)))
+    if not a.no_claude_md and project.update_claude_md(ROOT, cfg["project"]["uproject_rel"]):
         log("CLAUDE.md: added/updated ue-claude-kit section")
     if running(cfg) and added:
         log("Note: the editor is running; restart it to load newly enabled plugins (`ue restart`).")
@@ -102,10 +101,14 @@ def cmd_new(a):
     cfg = get_cfg()
     if cfg["project"]["uproject"]:
         die("This kit install already has a project: %s" % cfg["project"]["uproject"])
+    dest = os.path.abspath(os.path.join(ROOT, a.dir)) if a.dir else ROOT
+    if not os.path.normcase(dest).startswith(os.path.normcase(ROOT)):
+        die("--dir must be inside %s" % ROOT)
     t0 = time.time()
-    up = project.new_project(cfg["engine"]["templates"], a.template, a.name, ROOT, a.variant, cfg["engine"]["version"])
+    up = project.new_project(cfg["engine"]["templates"], a.template, a.name, dest, a.variant, cfg["engine"]["version"])
     log("Created %s from %s in %.1fs" % (up, a.template, time.time() - t0))
-    cfg = get_cfg(rediscover=True)
+    cfg = disc.discover(ROOT, cfg, uproject=up)
+    disc.write_config(ROOT, cfg)
     cmd_setup(argparse.Namespace(no_claude_md=False))
 
 
@@ -382,6 +385,7 @@ def main():
 
     s = sub.add_parser("discover", help="(re)discover paths and write ue_local_config.local")
     s.add_argument("--port", type=int, help="preferred MCP port (default 8000)")
+    s.add_argument("--uproject", help="use this .uproject (path relative to the repo root); kept across re-discovery")
     s.set_defaults(fn=cmd_discover)
     s = sub.add_parser("setup", help="enable plugins, write .mcp.json, .gitignore, CLAUDE.md section")
     s.add_argument("--no-claude-md", action="store_true")
@@ -391,6 +395,7 @@ def main():
     s.add_argument("--template", required=True, help="template id, e.g. TP_FirstPersonBP (see `ue templates`)")
     s.add_argument("--name", required=True)
     s.add_argument("--variant", help="template variant, e.g. ArenaShooter")
+    s.add_argument("--dir", help="folder for the project, relative to the repo root (default: the root), e.g. ue_project/MyGame")
     s.set_defaults(fn=cmd_new)
     s = sub.add_parser("status", help="editor and MCP status")
     s.add_argument("--json", action="store_true")

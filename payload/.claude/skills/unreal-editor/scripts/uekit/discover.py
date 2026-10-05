@@ -43,11 +43,28 @@ def find_project_root(start):
         d = parent
 
 
-def find_uprojects(root):
-    hits = glob.glob(os.path.join(root, "*.uproject"))
-    if not hits:
-        hits = glob.glob(os.path.join(root, "*", "*.uproject")) + glob.glob(os.path.join(root, "*", "*", "*.uproject"))
-    return sorted(norm(h) for h in hits if "/Saved/" not in norm(h) and "/Intermediate/" not in norm(h))
+SKIP_DIRS = {".git", ".svn", ".hg", ".claude", ".vs", ".idea", "node_modules", "Saved", "Intermediate", "Binaries",
+             "DerivedDataCache", "Plugins", "Content", "Source", "Build", "__pycache__", ".venv", "venv"}
+MAX_DEPTH = 5
+
+
+def find_uprojects(root, max_depth=MAX_DEPTH):
+    """.uproject files under `root` (monorepo-friendly): the shallowest level that has any,
+    searching up to `max_depth` directories down and skipping build/dependency folders."""
+    by_depth = {}
+    root = os.path.abspath(root)
+    base = root.rstrip("\\/").count(os.sep)
+    for dirpath, dirnames, filenames in os.walk(root):
+        depth = dirpath.rstrip("\\/").count(os.sep) - base
+        dirnames[:] = [] if depth >= max_depth else sorted(d for d in dirnames if d not in SKIP_DIRS)
+        for fn in filenames:
+            if fn.endswith(".uproject"):
+                by_depth.setdefault(depth, []).append(norm(os.path.join(dirpath, fn)))
+    return sorted(by_depth[min(by_depth)]) if by_depth else []
+
+
+def rel(root, path):
+    return norm(os.path.relpath(path, root)) if path else None
 
 
 # ---------------------------------------------------------------- engines
@@ -224,7 +241,7 @@ def load_config(root):
 
 COMMENTS = {
     "python_exe": "Python used to run the kit (read by the ue.cmd / ue launchers).",
-    "project.uproject": "null until a project exists; create one with `ue new`.",
+    "project.uproject": "null until a project exists (`ue new`). Change with `ue discover --uproject <path>`; kept across re-discovery.",
     "engine.root": "Engine directory (contains Engine/). Override discovery with the UE_ENGINE_ROOT env var.",
     "mcp.port": "HTTP port for the in-editor MCP server; .mcp.json must point at the same port.",
     "remote_exec.enabled": "Python remote execution: full `unreal` API for save-all, graceful quit, `ue py`.",
@@ -236,17 +253,28 @@ COMMENTS = {
 }
 
 
-def discover(root, previous=None, port=None):
+def choose_uproject(root, explicit=None, previous=None):
+    """Explicit path (relative to root or absolute) > previously configured path that still
+    exists > the single .uproject found by searching. Several found -> ask for --uproject."""
+    if explicit:
+        p = explicit if os.path.isabs(explicit) else os.path.join(root, explicit)
+        if not (p.endswith(".uproject") and os.path.isfile(p)):
+            raise DiscoveryError("--uproject %s is not an existing .uproject file." % explicit)
+        return norm(os.path.abspath(p))
+    prev = ((previous or {}).get("project") or {}).get("uproject")
+    if prev and os.path.isfile(prev):
+        return norm(prev)
+    found = find_uprojects(root)
+    if len(found) > 1:
+        raise DiscoveryError("Several .uproject files found; pick one with --uproject (relative to %s): %s"
+                             % (norm(root), ", ".join(rel(root, f) for f in found)))
+    return found[0] if found else None
+
+
+def discover(root, previous=None, port=None, uproject=None):
     from . import editor as editor_mod  # local import: editor imports discover
     previous = previous or {}
-    uprojects = find_uprojects(root)
-    uproject = uprojects[0] if len(uprojects) == 1 else None
-    if len(uprojects) > 1:
-        prev = (previous.get("project") or {}).get("uproject")
-        if prev in uprojects:
-            uproject = prev
-        else:
-            raise DiscoveryError("Several .uproject files found; keep one per kit install or set project.uproject: %s" % uprojects)
+    uproject = choose_uproject(root, uproject, previous)
     association = None
     if uproject:
         with open(uproject, encoding="utf-8-sig") as f:
@@ -276,6 +304,7 @@ def discover(root, previous=None, port=None):
         "project": {
             "root": norm(root),
             "uproject": uproject,
+            "uproject_rel": rel(root, uproject),
             "name": name,
             "dir": proj_dir,
             "log": norm(os.path.join(proj_dir, "Saved", "Logs", name + ".log")) if name else None,

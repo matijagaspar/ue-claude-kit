@@ -14,15 +14,25 @@ implemented but untested.
 The kit is fetched once and copied into the project. From then on it is part of the
 project (commit it) and maintained there; it does not track this repository.
 
-**Ask Claude** (in Claude Code, inside the project):
+The kit always goes into the **repo root** - the folder where you run Claude Code. The
+Unreal project can be right there or in a subfolder (monorepo):
+
+```
+my-game/                     my-monorepo/
+  MyGame.uproject              .claude/skills/unreal-editor/   <- kit
+  Content/ Config/             ue, ue.cmd, .mcp.json, CLAUDE.md
+  .claude/skills/...  <- kit   web/  services/  ...
+  ue, ue.cmd, .mcp.json        ue_project/MyGame/MyGame.uproject
+```
+
+**Ask Claude** (in Claude Code, at the repo root):
 
 > Install ue-claude-kit from https://github.com/matijagaspar/ue-claude-kit into this project.
 
-Claude should run the clone + install command below, then start using the `unreal-editor` skill.
-If you already have a checkout of the kit anywhere, `python <kit>/bootstrap.py <project_dir>` does
-the same (fresh clone of `main`, install, cleanup; `--ref` picks a branch/tag).
+Claude should follow [Notes for the installing agent](#notes-for-the-installing-agent), run the
+clone + install below, then use the `unreal-editor` skill.
 
-**Or run it yourself** from the project directory:
+**Or run it yourself** from the repo root:
 
 ```sh
 # clone + install + clean up (uses your git credentials, so it works while the repo is private)
@@ -35,36 +45,79 @@ python -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercon
 
 PowerShell: `git clone --depth 1 https://github.com/matijagaspar/ue-claude-kit.git $env:TEMP\uck; python $env:TEMP\uck\install.py .; Remove-Item -Recurse -Force $env:TEMP\uck`
 
-Options (passed to `install.py`):
+If you already have a checkout of the kit anywhere, `python <kit>/bootstrap.py <repo_root> [options]`
+does the same (fresh clone of `main`, install, cleanup; `--ref` picks a branch/tag).
+
+### Which options
+
+| Situation | Add to `install.py .` |
+|---|---|
+| Existing project, `.uproject` in the repo root | nothing |
+| Existing project in a subfolder (monorepo), only one `.uproject` within 5 levels | nothing - it is found automatically |
+| Several `.uproject` files, or it is deeper than 5 levels | `--uproject ue_project/MyGame/MyGame.uproject` |
+| Empty repo, new project in the root | `--new TP_FirstPersonBP --name MyGame` |
+| Monorepo, new project in a subfolder | `--new TP_FirstPersonBP --name MyGame --dir ue_project/MyGame` |
 
 ```
---new TP_FirstPersonBP --name MyGame   create the project from an engine template (empty dir)
---variant ArenaShooter                 template variant
+--uproject PATH                        existing .uproject to use (relative to the repo root)
+--new TEMPLATE --name NAME [--dir D]   create a Blueprint project from an engine template (`ue templates` lists them)
+--variant ArenaShooter                 template variant (with --new)
 --port 8010                            preferred MCP port (default 8000)
---no-setup                             copy + discover only, don't touch the .uproject/.mcp.json
+--no-setup                             copy + discover only, don't touch the .uproject/.mcp.json/.gitignore
 --force                                overwrite an existing kit install (local changes are lost)
---ref v1.0.0                           (bootstrap) branch or tag to fetch, default main
+--ref v1.0.0                           (bootstrap only) branch or tag to fetch, default main
 ```
 
-No Python on PATH? Use the engine's: `<Engine>\Engine\Binaries\ThirdParty\Python3\Win64\python.exe bootstrap.py .`
-From a local checkout you can also run `python install.py <project_dir>` directly.
+The project search skips `.git`, `node_modules`, `Saved`, `Intermediate`, `Binaries`, `Plugins`,
+`Content`, `Source` and similar folders. A chosen project is remembered in the config; switch later
+with `ue discover --uproject <path>`. If discovery fails, the install is rolled back so you can re-run it.
 
-The installer:
+No Python on PATH? Use the engine's: `<Engine>\Engine\Binaries\ThirdParty\Python3\Win64\python.exe install.py .`
 
-1. copies `.claude/skills/unreal-editor/` (skill + CLI) and the `ue` / `ue.cmd` launchers into the project,
-2. runs `ue discover` -> writes **`ue_local_config.local`** (YAML, gitignored): engine install
-   (from the `.uproject` EngineAssociation via the Epic launcher, registry, source-build registry
-   or `UE_ENGINE_ROOT`), editor binaries, bundled Python, MCP plugin presence, a free MCP port,
-   remote-execution module, GPU,
-3. runs `ue setup` -> enables the MCP + toolset + Python plugins in the `.uproject` (only those the
-   engine has), writes/merges `.mcp.json`, adds `.gitignore` entries, and adds a short
-   ue-claude-kit section to `CLAUDE.md`.
+### What the installer changes
 
-Then start Claude Code in the project and approve the `unreal-mcp` server when asked.
+1. copies `.claude/skills/unreal-editor/` (skill + CLI) and the `ue` / `ue.cmd` launchers into the repo
+   root, and adds `.gitattributes` rules that keep their line endings intact,
+2. runs `ue discover` -> writes **`ue_local_config.local`** (YAML, gitignored) in the repo root:
+   engine install (from the `.uproject` EngineAssociation via the Epic launcher, registry,
+   source-build registry or `UE_ENGINE_ROOT`), editor binaries, bundled Python, MCP plugin
+   presence, a free MCP port, remote-execution module, GPU,
+3. runs `ue setup`:
+   - enables the MCP + toolset + Python plugins in the `.uproject` (only those the engine has),
+   - writes/merges `.mcp.json` in the repo root (other servers are kept),
+   - root `.gitignore`: `/ue_local_config.local`; the project folder's `.gitignore`: anchored
+     Unreal rules (`/Binaries/`, `/Saved/`, `/Intermediate/`, ...) so they never hide folders
+     elsewhere in a monorepo; existing equivalent rules are not duplicated,
+   - adds a marked ue-claude-kit block to `CLAUDE.md` (with the project's relative path).
+
 `.claude/skills/unreal-editor/KIT_SOURCE` records which repo/commit was installed.
 
-Commit: `.claude/skills/unreal-editor/`, `ue`, `ue.cmd`, `.mcp.json`, the `.uproject` change, `CLAUDE.md`.
-Don't commit: `ue_local_config.local` (already gitignored).
+Commit: `.claude/skills/unreal-editor/`, `ue`, `ue.cmd`, `.gitattributes`, `.mcp.json`, `.gitignore`
+changes, the `.uproject` change, `CLAUDE.md`. Don't commit: `ue_local_config.local`.
+
+### Notes for the installing agent
+
+- Run the install from the repo root the user works in. Look for `.uproject` files first; if there
+  are several, ask the user which one and pass `--uproject`. If there is none, ask whether to create
+  one (template, name, and for a monorepo the `--dir`).
+- If an editor has the project open, ask the user to save and close it first (setup edits the `.uproject`).
+- After installing, run `./ue start` then `./ue stop` once to confirm the editor launches headless,
+  and tell the user to restart Claude Code so the `unreal-mcp` server from `.mcp.json` loads.
+- Show the user the diff of their existing files (`.uproject`, `.gitignore`, `.mcp.json`, `CLAUDE.md`)
+  before they commit.
+- **C++ projects** (the `.uproject` has a `Modules` list / there is a `Source/` folder): the kit does
+  not compile code. A headless editor cannot rebuild missing or stale project modules - it just
+  exits, and the log says modules are missing or were built with a different engine version.
+  Mitigate it as the agent:
+  - before the first `ue start`, check that `Binaries/<Platform>/UnrealEditor-<Module>.dll` (Win64)
+    exists for each module and is newer than the `Source/` files; if not, build the editor target
+    with the engine's build script while the editor is closed:
+    `"<engine.root>/Engine/Build/BatchFiles/Build.bat" <ProjectName>Editor Win64 Development -Project="<uproject>" -WaitMutex`
+    (Linux/macOS: `Engine/Build/BatchFiles/<Linux|Mac>/Build.sh`). Paths come from `ue config`.
+  - this needs a C++ toolchain (Visual Studio with the "Game development with C++" workload on
+    Windows); if it is missing, tell the user instead of trying to install it,
+  - after changing C++ code, `ue stop`, build, then start again (Live Coding only applies to a GUI editor),
+  - if `ue start` reports the editor exited, check `ue logs --grep "module|Modules"` first.
 
 ## What Claude does with it
 
@@ -82,7 +135,7 @@ ue status                     ue ensure --mode nullrhi|offscreen|gui
 ue stop | restart             ue yield-gpu [--nullrhi]      ue gpu
 ue mcp toolsets               ue mcp describe <toolset>     ue mcp call <toolset> <tool> '<json>'
 ue py "print(unreal.SystemLibrary.get_engine_version())"
-ue save | dirty               ue render out.png [--camera x,y,z,pitch,yaw,roll]
+ue save | dirty               ue render out.png [--camera=x,y,z,pitch,yaw,roll]
 ue logs --grep Error          ue config [key]               ue discover | setup | templates | new
 ```
 

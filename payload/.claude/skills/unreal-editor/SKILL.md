@@ -10,6 +10,10 @@ The `ue` CLI in the project root controls the editor. Machine-specific paths liv
 (`ue config` prints it, `ue config engine.root` prints one key). The first `ue` run
 discovers everything and writes that file; `ue discover` refreshes it.
 
+The kit sits in the repo root; the Unreal project may be in a subfolder (monorepo) -
+`ue config project.uproject_rel` / `project.dir` tell you where. Asset and Content paths are
+relative to that project folder, not the repo root.
+
 Invoke it as `./ue <cmd>` from Bash (Git Bash) or `.\ue.cmd <cmd>` from PowerShell/cmd.
 JSON arguments are easiest from Bash with single quotes.
 
@@ -62,6 +66,16 @@ time the editor runs), or ask the user to reconnect via `/mcp`.
 The server exposes three meta-tools: `list_toolsets`, `describe_toolset`, `call_tool`
 (`toolset_name`, `tool_name`, `arguments`). Always `describe` a toolset before first use.
 Details and gotchas: [reference.md](reference.md).
+
+## C++ projects (not handled by the kit)
+
+If the `.uproject` lists `Modules` (there is a `Source/` folder), the kit does not compile code
+and a headless editor cannot rebuild stale modules - it exits on start. Before starting, or after
+changing C++ code (with the editor stopped), build the editor target yourself:
+`"<engine.root>/Engine/Build/BatchFiles/Build.bat" <ProjectName>Editor Win64 Development -Project="<project.uproject>" -WaitMutex`
+(values from `ue config`). It needs a C++ toolchain (Visual Studio "Game development with C++");
+if that's missing, tell the user. When `ue start` says the editor exited, check
+`ue logs --grep "module|Modules"` first.
 
 ## Choosing MCP tools vs `ue py`
 
