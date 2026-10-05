@@ -18,17 +18,19 @@ project (commit it) and maintained there; it does not track this repository.
 
 > Install ue-claude-kit from https://github.com/matijagaspar/ue-claude-kit into this project.
 
-Claude should run the bootstrap below, then start using the `unreal-editor` skill.
+Claude should run the clone + install command below, then start using the `unreal-editor` skill.
+If you already have a checkout of the kit anywhere, `python <kit>/bootstrap.py <project_dir>` does
+the same (fresh clone of `main`, install, cleanup; `--ref` picks a branch/tag).
 
 **Or run it yourself** from the project directory:
 
 ```sh
-# one-liner (public repo): downloads bootstrap.py, which fetches the kit (git clone, or zip
-# if git is missing) into a temp folder, installs it and deletes the temp copy
-python -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/matijagaspar/ue-claude-kit/main/bootstrap.py').read())" .
+# clone + install + clean up (uses your git credentials, so it works while the repo is private)
+git clone --depth 1 https://github.com/matijagaspar/ue-claude-kit.git /tmp/uck && python /tmp/uck/install.py . --source "ue-claude-kit@$(git -C /tmp/uck rev-parse --short HEAD)" && rm -rf /tmp/uck
 
-# or clone yourself (also works for a private repo with your git credentials)
-git clone --depth 1 https://github.com/matijagaspar/ue-claude-kit.git /tmp/uck && python /tmp/uck/install.py . && rm -rf /tmp/uck
+# one-liner - ONLY if the repo is public (raw.githubusercontent.com rejects private repos):
+# downloads bootstrap.py, which fetches the kit into a temp folder, installs it, deletes the temp copy
+python -c "import urllib.request as u; exec(u.urlopen('https://raw.githubusercontent.com/matijagaspar/ue-claude-kit/main/bootstrap.py').read())" .
 ```
 
 PowerShell: `git clone --depth 1 https://github.com/matijagaspar/ue-claude-kit.git $env:TEMP\uck; python $env:TEMP\uck\install.py .; Remove-Item -Recurse -Force $env:TEMP\uck`
