@@ -98,3 +98,7 @@ ue logs --grep Error          ue config [key]               ue discover | setup 
 - **Standard library only**: no pip installs; the config file uses a small YAML subset any YAML parser reads.
 - **GPU check**: Windows can't attribute GPU usage per process, so `ue gpu` samples overall
   utilization (`gpu.busy_util_percent`, default 40) plus an optional `gpu.watch_processes` list.
+
+## License
+
+MIT - see [LICENSE](LICENSE). Unreal Engine and its plugins are not included; the kit uses your own engine install.

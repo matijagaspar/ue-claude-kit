@@ -39,7 +39,7 @@ Names come in two styles - copy them exactly from `ue mcp toolsets`:
 - Useful: `unreal.EditorAssetLibrary`, `unreal.get_editor_subsystem(unreal.EditorActorSubsystem)` (EditorLevelLibrary is deprecated in 5.8),
   `unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True, True)`, `unreal.AssetToolsHelpers.get_asset_tools()`.
 
-## Timings (RTX 4070 Ti SUPER, warm caches, FirstPerson template)
+## Timings (mid/high-end desktop GPU, warm caches, FirstPerson template)
 
 | Step | Time |
 |---|---|
